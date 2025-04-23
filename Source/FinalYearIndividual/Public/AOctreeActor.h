@@ -28,7 +28,16 @@ public:
     float Bound = 1000.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Octree")
+    bool bPrune = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Octree")
     bool bDraw = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Octree")
+    bool bDrawValid = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Octree")
+    bool bDrawInvalid = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Octree")
     bool bLoad = false;

@@ -34,7 +34,7 @@ void AOctreeActor::BeginPlay()
     {
         CreateOctree();
     }
-    T0 = GetWorld()->GetTimeSeconds();
+    
 }
 
 void AOctreeActor::Tick(float DeltaTime)
@@ -43,6 +43,7 @@ void AOctreeActor::Tick(float DeltaTime)
 
     if (Task == TEXT("build"))
     {
+        T0 = GetWorld()->GetTimeSeconds();
         while (ToSplit.Num() > 0)
         {
             UCustomNodeObject* Node = ToSplit[0];
@@ -57,6 +58,7 @@ void AOctreeActor::Tick(float DeltaTime)
 
         double GenTime = GetWorld()->GetTimeSeconds() - T0;
         UE_LOG(LogTemp, Log, TEXT("OctTree built in %f s"), GenTime);
+        UE_LOG(LogTemp, Log, TEXT("Valid Node Numbers = %d"), Data->ValidNodes.Num());
         Task = TEXT("graph");
     }
     else if (Task == TEXT("graph"))
@@ -336,57 +338,60 @@ TPair<FVector, TArray<FVector>> AOctreeActor::GetNewCenters(UCustomNodeObject* N
 
 void AOctreeActor::PruneOctree()
 {
-    TArray<FString> MergeTargets;
-
-    for (const auto& Pair : Data->Cells)
+    if (bPrune)
     {
-        const FString& ParentId = Pair.Key;
-        UCustomNodeObject* Parent = Pair.Value;
+        TArray<FString> MergeTargets;
 
-        if (Parent->Children.Num() == 0)
-            continue;
-
-        bool bCanMerge = true;
-
-        for (const FString& ChildId : Parent->Children)
+        for (const auto& Pair : Data->Cells)
         {
-            if (!Data->InvalidNodes.Contains(ChildId))
+            const FString& ParentId = Pair.Key;
+            UCustomNodeObject* Parent = Pair.Value;
+
+            if (Parent->Children.Num() == 0)
+                continue;
+
+            bool bCanMerge = true;
+
+            for (const FString& ChildId : Parent->Children)
             {
-                bCanMerge = false;
-                break;
+                if (!Data->InvalidNodes.Contains(ChildId))
+                {
+                    bCanMerge = false;
+                    break;
+                }
+            }
+
+            if (bCanMerge)
+            {
+                MergeTargets.Add(ParentId);
             }
         }
 
-        if (bCanMerge)
+        for (const FString& ParentId : MergeTargets)
         {
-            MergeTargets.Add(ParentId);
-        }
-    }
+            UCustomNodeObject* Parent = Data->Cells[ParentId];
 
-    for (const FString& ParentId : MergeTargets)
-    {
-        UCustomNodeObject* Parent = Data->Cells[ParentId];
-
-        for (const FString& ChildId : Parent->Children)
-        {
-            Data->InvalidNodes.Remove(ChildId);
-        }
-
-        Parent->Tag = "Valid";
-        Data->ValidNodes.Add(Parent->Idx, Parent);
-
-        Data->UpdateNeighborsOnMerge(Parent);
-
-        for (const auto& Pair : Parent->Neighbors.Valid)
-        {
-            for (const FString& Neigh : Pair.Value.Neighbors)
+            for (const FString& ChildId : Parent->Children)
             {
-                TransitionsAdd.Add(TPair<FString, FString>(Parent->Idx, Neigh));
+                Data->InvalidNodes.Remove(ChildId);
+            }
+
+            Parent->Tag = "Valid";
+            Data->ValidNodes.Add(Parent->Idx, Parent);
+
+            Data->UpdateNeighborsOnMerge(Parent);
+
+            for (const auto& Pair : Parent->Neighbors.Valid)
+            {
+                for (const FString& Neigh : Pair.Value.Neighbors)
+                {
+                    TransitionsAdd.Add(TPair<FString, FString>(Parent->Idx, Neigh));
+                }
             }
         }
-    }
 
-    MergeNeighbors(MergeTargets);
+        MergeNeighbors(MergeTargets);
+    }
 }
 
 
@@ -460,18 +465,26 @@ void AOctreeActor::DrawDebugOctree()
     FColor InvalidColor = FColor::Red;
 
     // 1. Draw Valid nodes
-    for (const auto& Pair : Data->ValidNodes)
+    if (bDrawValid)
     {
-        UCustomNodeObject* Node = Pair.Value;
-        DrawDebugBox(World, Node->Position, Node->Scale / 2.0f, ValidColor, true, -1.0f, 0, 2.0f);
+        for (const auto& Pair : Data->ValidNodes)
+        {
+            UCustomNodeObject* Node = Pair.Value;
+            DrawDebugBox(World, Node->Position, Node->Scale / 2.0f, ValidColor, true, -1.0f, 0, 2.0f);
+        }
     }
+    
 
     // 2. Draw Invalid nodes
-    for (const auto& Pair : Data->InvalidNodes)
+    if (bDrawInvalid)
     {
-        UCustomNodeObject* Node = Pair.Value;
-        DrawDebugBox(World, Node->Position, Node->Scale / 2.0f, InvalidColor, true, -1.0f, 0, 2.0f);
+        for (const auto& Pair : Data->InvalidNodes)
+        {
+            UCustomNodeObject* Node = Pair.Value;
+            DrawDebugBox(World, Node->Position, Node->Scale / 2.0f, InvalidColor, true, -1.0f, 0, 2.0f);
+        }
     }
+    
 
     // 3. Draw graph edges (optional)
     for (const auto& Pair : Data->ValidNodes)
